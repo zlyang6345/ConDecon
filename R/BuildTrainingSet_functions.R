@@ -29,11 +29,11 @@
 #' TrainingSet = BuildTrainingSet(count = counts_gps, latent = latent_gps, max.iter = 50)
 BuildTrainingSet <- function(count,
                              latent,
-                             max.iter = 5000,
+                             max.iter = 5000, 
+                             min.cent = 1, 
                              max.cent = 5,
                              step = ifelse(max.iter <= 10000, max.iter, 10000),
                              dims = 10,
-                             min.cent = 1,
                              n = round(ncol(count)/2),
                              sigma_min_cells = NULL,
                              sigma_max_cells = NULL,
@@ -43,13 +43,12 @@ BuildTrainingSet <- function(count,
   output <- vector(mode="list", length=0)
 
   tot.cells <- ncol(count)
-
+  
+  # Calculate the Euclidean distance between different cells in latent space. 
   output$TrainingSet$latent_distance <- as.matrix(stats::dist(latent[,1:dims,drop=F]))
   output$TrainingSet$dims <- dims
 
   N <- ncol(count)
-
-
 
   ### FIND SIGMA VALUES ###
 
@@ -66,16 +65,21 @@ BuildTrainingSet <- function(count,
   } else{
     N_max <- round(sigma_max_cells)
   }
+  
   k <- N_max
+  # For each row (each point), it finds the indices of the k nearest neighbors using the precomputed distance matrix.
   knn <- t(apply(output$TrainingSet$latent_distance, 1, function(i){
     order(i, decreasing = F)[1:k]
   }))
+  # For each point, it extracts the actual distances to those neighbors.
   knn_dist <- t(apply(knn, 1, function(i){
     output$TrainingSet$latent_distance[i[1],i]
   }))
-  k_dist <- colMeans(knn_dist)
+  k_dist <- colMeans(knn_dist) # The average neighbor distance for each point.
+  
   error.sigma.max <- FALSE
-  tryCatch( {sigma_max <- stats::uniroot(Find_Sigma, x_i=seq(0,max(k_dist), by = 0.01),
+  # The function uniroot searches the interval from lower to upper for a root (i.e., zero) of the function f with respect to its first argument.
+  tryCatch( {sigma_max <- stats::uniroot(Find_Sigma, x_i=seq(0, max(k_dist), by = 0.01),
                                   width = 0.01, lower=min(knn_dist[knn_dist>0]),
                                   upper=max(knn_dist))$root }, error = function(e)
                                     {error.sigma.max <<- TRUE})
@@ -96,6 +100,7 @@ BuildTrainingSet <- function(count,
                                    width = 0.01, lower=min(knn_dist[knn_dist>0]),
                                    upper=max(knn_dist))$root }, error = function(e)
                                      {error.sigma.min <<- TRUE})
+  
   if(error.sigma.max & error.sigma.min){
     stop("Could not solve for sigma\nTry increasing sigma_max_cells and/or sigma_min_cells\nor decreasing the number of dimensions in the latent space to decrease sparsity")
     return(NULL)
@@ -105,35 +110,54 @@ BuildTrainingSet <- function(count,
     sigma_max = sigma_min*5
   }
 
-
-
   ### SELECT TRAINING PARAMETERS ###
-
+  
+  # Create a matrix called parameters that will store all the info for each synthetic training set
+  # (i.e., each simulated Gaussian mixture).
+  #  nrow = max.iter: one row per training example you’re generating.
+  #  ncol = 1 + max.cent * 3: enough columns to store:
+  #  1 for the number of centers in the GMM (num.centers)
+  # max.cent for the center indices (center.1, center.2, ...)
+  # max.cent for the sigmas (sigma.1, sigma.2, ...)
+  # max.cent for the mixing weights (mix.1, mix.2, ...)
+  # list(
+  #   NULL,
+  #   c("num.centers", "center.1", "center.2", ..., "sigma.1", ..., "mix.1", ...)
+  # )
   output$TrainingSet$parameters <- matrix(0, ncol = (1+max.cent*3), nrow = max.iter, dimnames =
                                 list(NULL,c("num.centers",paste0("center.",1:max.cent),
                                             paste0("sigma.",1:max.cent),paste0("mix.",1:max.cent))))
 
   # Randomly choose the parameters of a Gaussian mixture model for each training set
   ## Choose number of centers
-  output$TrainingSet$parameters[,1] <- sample(min.cent:max.cent,max.iter, replace = TRUE)
+  output$TrainingSet$parameters[,1] <- sample(min.cent:max.cent, max.iter, replace = TRUE)
 
   ## Choose centers, sigma, and constant
   ## Find the cell probabilities
+  # This is the matrix to store the p-vectors
+  # Total number of cells * max iterations(# of data points)
   output$TrainingSet$cell.prob <- matrix(0, ncol = max.iter, nrow = tot.cells)
+  
+  # 
   for(i in 1:max.iter){
 
-    # Choose sigma
-    output$TrainingSet$parameters[i,(2+max.cent):(1+max.cent+output$TrainingSet$parameters[i,1])] <-
-      sample(10^seq(log10(sigma_min), log10(sigma_max), by = 0.0001), output$TrainingSet$parameters[i,1],
-             replace=TRUE)
-
-    # Choose mixture between [1:100]
-    mixture <- sample(1:100,output$TrainingSet$parameters[i,1], replace=TRUE)
-    output$TrainingSet$parameters[i,(2+max.cent*2):(1+max.cent*2+output$TrainingSet$parameters[i,1])] <- mixture/sum(mixture)
-
     # Choose which cells will be the centers
-    output$TrainingSet$parameters[i,2:(1+output$TrainingSet$parameters[i,1])] <-
+    output$TrainingSet$parameters[i, 2:(1+output$TrainingSet$parameters[i,1])] <-
       sample(1:tot.cells,output$TrainingSet$parameters[i,1],replace = FALSE)
+    
+    # Choose sigma
+    # 2 + max.cent is the first column index of sigma.1
+    # 1 + max.cent + output$TrainingSet$parameters[i, 1] is the last index to write to, based on how many centers are used in row i.
+    output$TrainingSet$parameters[i,(2+max.cent):(1+max.cent+output$TrainingSet$parameters[i,1])] <-
+      sample(10^seq(log10(sigma_min), # Logarithmic spacing cause linear spacing would put too much emphasis on large values 
+                    log10(sigma_max), # Logarithmic spacing ensures even sampling across multiplicative scales 
+                    by = 0.0001),  # a sequence
+             output$TrainingSet$parameters[i,1], # pick n samples from the sequence 
+             replace=TRUE)
+    
+    # Choose mixture between [1:100]
+    mixture <- sample(1:100, output$TrainingSet$parameters[i,1], replace=TRUE)
+    output$TrainingSet$parameters[i, (2+max.cent*2):(1+max.cent*2+output$TrainingSet$parameters[i,1])] <- mixture/sum(mixture)
 
     # Cell Prob
     output$TrainingSet$cell.prob[,i] <- CellProb(parameters = output$TrainingSet$parameters[i,], latent_distance = output$TrainingSet$latent_distance,
@@ -153,7 +177,9 @@ BuildTrainingSet <- function(count,
 #' @param sigma variable
 #' @param x_i range of sigma values
 #' @param width standard deviation of Gaussian
-#'
+#' The integral is approximated by Riemann Sum: 
+#' ∑_i f(x_i)⋅width
+#' 
 #' @return Sigma value
 Find_Sigma <- function(sigma, x_i, width){
   sum((1/(sqrt(2*pi)*sigma))*exp(-(x_i)^2/(2*sigma^2)))*width-0.5
