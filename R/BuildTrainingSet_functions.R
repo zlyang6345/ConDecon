@@ -34,7 +34,7 @@ BuildTrainingSet <- function(count,
                              max.cent = 5,
                              step = ifelse(max.iter <= 10000, max.iter, 10000),
                              dims = 10,
-                             n = round(ncol(count)/2),
+                             n = round(ncol(count)/2), # Number of cells / 2
                              sigma_min_cells = NULL,
                              sigma_max_cells = NULL,
                              verbose = FALSE){
@@ -138,7 +138,6 @@ BuildTrainingSet <- function(count,
   # Total number of cells * max iterations(# of data points)
   output$TrainingSet$cell.prob <- matrix(0, ncol = max.iter, nrow = tot.cells)
   
-  # 
   for(i in 1:max.iter){
 
     # Choose which cells will be the centers
@@ -160,8 +159,9 @@ BuildTrainingSet <- function(count,
     output$TrainingSet$parameters[i, (2+max.cent*2):(1+max.cent*2+output$TrainingSet$parameters[i,1])] <- mixture/sum(mixture)
 
     # Cell Prob
-    output$TrainingSet$cell.prob[,i] <- CellProb(parameters = output$TrainingSet$parameters[i,], latent_distance = output$TrainingSet$latent_distance,
-                                     max.cent = max.cent)
+    output$TrainingSet$cell.prob[,i] <- CellProb(parameters = output$TrainingSet$parameters[i,], 
+                                                 latent_distance = output$TrainingSet$latent_distance,
+                                                 max.cent = max.cent)
   }
   gc(verbose = FALSE)
 
@@ -193,44 +193,53 @@ Find_Sigma <- function(sigma, x_i, width){
 #' @param max.cent Maximum number of Gaussian centers
 #'
 #' @return Numeric vector with an assigned prob for each cell
-CellProb <- function(parameters,latent_distance,max.cent){
-  # message("CellProb internal")
+CellProb <- function(parameters, latent_distance, max.cent){
+  
   num.cent <- parameters[1]
-  g.mix.model <- t((parameters[(2+max.cent*2):(1+max.cent*2+num.cent)]/
-                      (sqrt(2*pi)*parameters[(2+max.cent):(1+max.cent+num.cent)]))*
-                     exp(-1*t(latent_distance[,parameters[2:(1+num.cent)]])^2/
-                           (2*parameters[(2+max.cent):(1+max.cent+num.cent)]^2)))
+  selected_centers <- parameters[2 : (1 + num.cent)]                    # indices of centers
+  sigmas <- parameters[(2 + max.cent) : (1 + max.cent + num.cent)]      # std deviations σ
+  weights <- parameters[(2 + 2*max.cent) : (1 + 2*max.cent + num.cent)] # mixing weights
+  
+  # g.mix.model n_cells * n_centers 
+  # entry represents the probability that the cell comes from that center
+  g.mix.model <- t( 
+                    (weights / (sqrt(2*pi)*sigmas)) * 
+                     exp(-1 * t(latent_distance[, selected_centers])^2 / (2*sigmas^2))
+                  )
+  
+  # the probability of each cell. 
   return(rowSums(g.mix.model)/sum(rowSums(g.mix.model)))
 }
 
-#' Pick cells based on the Gaussian kernal
+#' Pick cells based on the Gaussian kernel
 #' @param max.iter Size of the training data
 #' @param step Manual threading; number of calculations to do simultaneously
 #' @param cell.prob Cell probability distributions (matrix)
 #' @param max.cent Maximum number of Gaussian centers
-#' @param tot.cells Number of cells to select and aggregate for each simulated bulk sample
-#' @param n Total number of cells in the single-cell data
+#' @param tot.cells Total number of cells in the single-cell data
+#' @param n Number of cells to select and aggregate for each simulated bulk sample
 #' @param verbose Whether to print (verbose = FALSE)
 #'
 #' @return Matrix of with cells selected to be in each bulk sample
-PickCells <- function(max.iter,step,cell.prob,max.cent,tot.cells,n,verbose){
+PickCells <- function(max.iter, step, cell.prob, max.cent, tot.cells, n, verbose){
   # if(verbose == TRUE){
   #   message("PickCells")
   # }
 
   starting <- 1
   pick.cells <- NULL
+  
   if ((max.iter/step) == round(max.iter/step)){
-    for(i in seq(from = step, to = max.iter,by=step)){
-      pick_cells <- lapply(starting:i,BulkCells_subfxn,cell.prob=cell.prob,
-                           max.cent=max.cent, tot.cells=tot.cells,n=n)
-      pick.cells <- rbind(pick.cells, do.call(rbind,pick_cells))
+    for(i in seq(from = step, to = max.iter, by=step)){
+      pick_cells <- lapply(starting:i, BulkCells_subfxn, cell.prob=cell.prob,
+                           tot.cells=tot.cells, n=n)
+      pick.cells <- rbind(pick.cells, do.call(rbind, pick_cells))
       starting <- i+1
     }
   } else if((max.iter/step) != round(max.iter/step)){
     for(i in c(seq(from = step, to = max.iter,by=step), max.iter)){
       pick_cells <- lapply(starting:i,BulkCells_subfxn,cell.prob=cell.prob,
-                           max.cent=max.cent, tot.cells=tot.cells,n=n)
+                           tot.cells=tot.cells,n=n)
       pick.cells <- rbind(pick.cells, do.call(rbind, pick_cells))
       starting <- i+1
     }
@@ -241,13 +250,12 @@ PickCells <- function(max.iter,step,cell.prob,max.cent,tot.cells,n,verbose){
 #' Sample cells
 #' @param i Indicator for the cell probability distribution
 #' @param cell.prob Cell probability distributions (matrix)
-#' @param max.cent Maxiumum number of centers
 #' @param tot.cells Number of cells to select and aggregate for each simulated bulk sample
 #' @param n Total number of cells in the single-cell data
 #'
 #' @return Cells selected to be in each bulk sample
-BulkCells_subfxn <- function(i,cell.prob,max.cent,tot.cells,n){
-  return(sample(1:tot.cells,n,replace = TRUE,prob = cell.prob[,i]))
+BulkCells_subfxn <- function(i, cell.prob, tot.cells, n){
+  return(sample(1:tot.cells, n, replace = TRUE, prob = cell.prob[,i]))
 }
 
 #' Aggregate cells in bulk data based on the Gaussian kernal
