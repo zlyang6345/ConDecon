@@ -27,7 +27,7 @@
 #'
 #' # For this example, we will reduce the training size to max.iter = 50 to reduce run time
 #' TrainingSet = BuildTrainingSet(count = counts_gps, latent = latent_gps, max.iter = 50)
-BuildTrainingSet <- function(count,
+BuildTrainingSet <- function (count,
                              latent,
                              max.iter = 5000, 
                              min.cent = 1, 
@@ -37,7 +37,7 @@ BuildTrainingSet <- function(count,
                              n = round(ncol(count)/2), # Number of cells / 2
                              sigma_min_cells = NULL,
                              sigma_max_cells = NULL,
-                             verbose = FALSE){
+                             verbose = FALSE) {
 
   output <- NULL
   output <- vector(mode="list", length=0)
@@ -79,10 +79,11 @@ BuildTrainingSet <- function(count,
   
   error.sigma.max <- FALSE
   # The function uniroot searches the interval from lower to upper for a root (i.e., zero) of the function f with respect to its first argument.
-  tryCatch( {sigma_max <- stats::uniroot(Find_Sigma, x_i=seq(0, max(k_dist), by = 0.01),
-                                  width = 0.01, lower=min(knn_dist[knn_dist>0]),
-                                  upper=max(knn_dist))$root }, error = function(e)
-                                    {error.sigma.max <<- TRUE})
+  # x_i=seq(0, max(k_dist), by = 0.01) is the range to do the integral
+  # lower=min(knn_dist[knn_dist>0]), upper=max(knn_dist) is the range of sigma to find root 
+  tryCatch({ sigma_max <- stats::uniroot(Find_Sigma, x_i=seq(0, max(k_dist), by = 0.01), width = 0.01, 
+                                         lower=min(knn_dist[knn_dist>0]), upper=max(knn_dist))$root }, 
+            error = function(e) {error.sigma.max <<- TRUE})
   # sigma_max <- uniroot(Find_Sigma, x_i=seq(0,max(k_dist), by = 0.01), width = 0.01, lower=min(knn_dist[knn_dist>0]), upper=max(knn_dist))$root
 
   # Find sigma min
@@ -96,10 +97,9 @@ BuildTrainingSet <- function(count,
   k_dist <- colMeans(knn_dist)
   # sigma_min <- uniroot(Find_Sigma, x_i=seq(0,max(k_dist), by = 0.01), width = 0.01, lower=min(knn_dist[knn_dist>0]), upper=max(knn_dist))$root
   error.sigma.min <- FALSE
-  tryCatch( { sigma_min <- uniroot(Find_Sigma, x_i=seq(0,max(k_dist), by = 0.01),
-                                   width = 0.01, lower=min(knn_dist[knn_dist>0]),
-                                   upper=max(knn_dist))$root }, error = function(e)
-                                     {error.sigma.min <<- TRUE})
+  tryCatch({ sigma_min <- uniroot(Find_Sigma, x_i=seq(0, max(k_dist), by = 0.01), width = 0.01, 
+                                   lower=min(knn_dist[knn_dist>0]), upper=max(knn_dist))$root }, 
+            error = function(e) {error.sigma.min <<- TRUE})
   
   if(error.sigma.max & error.sigma.min){
     stop("Could not solve for sigma\nTry increasing sigma_max_cells and/or sigma_min_cells\nor decreasing the number of dimensions in the latent space to decrease sparsity")
@@ -111,7 +111,6 @@ BuildTrainingSet <- function(count,
   }
 
   ### SELECT TRAINING PARAMETERS ###
-  
   # Create a matrix called parameters that will store all the info for each synthetic training set
   # (i.e., each simulated Gaussian mixture).
   #  nrow = max.iter: one row per training example you’re generating.
@@ -125,8 +124,8 @@ BuildTrainingSet <- function(count,
   #   c("num.centers", "center.1", "center.2", ..., "sigma.1", ..., "mix.1", ...)
   # )
   output$TrainingSet$parameters <- matrix(0, ncol = (1+max.cent*3), nrow = max.iter, dimnames =
-                                list(NULL,c("num.centers",paste0("center.",1:max.cent),
-                                            paste0("sigma.",1:max.cent),paste0("mix.",1:max.cent))))
+                                list(NULL, c("num.centers", paste0("center.",1:max.cent),
+                                            paste0("sigma.", 1:max.cent), paste0("mix.", 1:max.cent))))
 
   # Randomly choose the parameters of a Gaussian mixture model for each training set
   ## Choose number of centers
@@ -142,7 +141,7 @@ BuildTrainingSet <- function(count,
 
     # Choose which cells will be the centers
     output$TrainingSet$parameters[i, 2:(1+output$TrainingSet$parameters[i,1])] <-
-      sample(1:tot.cells,output$TrainingSet$parameters[i,1],replace = FALSE)
+      sample(1:tot.cells, output$TrainingSet$parameters[i,1], replace = FALSE)
     
     # Choose sigma
     # 2 + max.cent is the first column index of sigma.1
@@ -182,7 +181,7 @@ BuildTrainingSet <- function(count,
 #' 
 #' @return Sigma value
 Find_Sigma <- function(sigma, x_i, width){
-  sum((1/(sqrt(2*pi)*sigma))*exp(-(x_i)^2/(2*sigma^2)))*width-0.5
+  sum( (1/(sqrt(2*pi)*sigma)) * exp(-(x_i)^2/(2*sigma^2)) )*width-0.5
 }
 
 #' Calculate cell probability
