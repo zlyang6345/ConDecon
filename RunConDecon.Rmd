@@ -1,0 +1,47 @@
+---
+title: "RunConDecon"
+output: html_document
+---
+
+## Read Necessary Datasets
+
+```{r}
+meta_data_gps <- read.csv("data/meta_data_gps.csv", row.names = 1)
+latent_gps = read.csv("data/latent.csv", row.names = 1)
+bulk_gps = read.csv("data/bulk_gps.csv", row.names = 1)
+counts_gps = read.csv("data/counts_gps.csv", row.names = 1)
+```
+
+```{r}
+# Define the path to your input file
+file_path = "data/gene_order.txt"
+# Read the content of the file
+# The readLines() function reads the file line by line.
+# Since your file contains all gene IDs on a single line, it will read it as one string.
+file_content = readLines(file_path)
+# Split the single string by commas to get individual gene IDs.
+# The unlist() function converts the list returned by strsplit() into a vector.
+variable_genes_gps = unlist(strsplit(file_content, ","))
+# Remove any leading or trailing whitespace from each gene ID
+variable_genes_gps = trimws(variable_genes_gps)
+```
+
+## Visualize
+
+```{r}
+devtools::load_all()
+```
+
+```{r}
+# Visualize the cluster annotations of the single-cell RNA seq data
+ggplot(data.frame(meta_data_gps), aes(x = UMAP_1, y = UMAP_2, color = celltypes)) + 
+  geom_point(size = 1.5) + 
+  theme_classic()
+```
+
+## Run ConDecon
+
+```{r}
+ConDecon_obj = RunConDecon(counts = counts_gps, latent = latent_gps,
+bulk = bulk_gps, variable.features = variable_genes_gps, max.iter = 50)
+```

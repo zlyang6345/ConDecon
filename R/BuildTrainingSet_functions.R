@@ -27,17 +27,17 @@
 #'
 #' # For this example, we will reduce the training size to max.iter = 50 to reduce run time
 #' TrainingSet = BuildTrainingSet(count = counts_gps, latent = latent_gps, max.iter = 50)
-BuildTrainingSet <- function (count,
+BuildTrainingSet <- function(count,
                              latent,
-                             max.iter = 5000, 
-                             min.cent = 1, 
+                             max.iter = 5000,
                              max.cent = 5,
                              step = ifelse(max.iter <= 10000, max.iter, 10000),
                              dims = 10,
-                             n = round(ncol(count)/2), # Number of cells / 2
+                             min.cent = 1,
+                             n = round(ncol(count)/2),
                              sigma_min_cells = NULL,
                              sigma_max_cells = NULL,
-                             verbose = FALSE) {
+                             verbose = FALSE){
 
   output <- NULL
   output <- vector(mode="list", length=0)
