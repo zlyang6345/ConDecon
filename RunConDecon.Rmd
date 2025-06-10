@@ -8,7 +8,7 @@ output: html_document
 ```{r}
 meta_data_gps <- read.csv("data/meta_data_gps.csv", row.names = 1)
 latent_gps = read.csv("data/latent.csv", row.names = 1)
-bulk_gps = read.csv("data/bulk_gps.csv", row.names = 1)
+bulk_gps = read.csv("data/bulk_gps.csv", row.names = 1, header=TRUE)
 counts_gps = read.csv("data/counts_gps.csv", row.names = 1)
 ```
 
@@ -44,4 +44,17 @@ ggplot(data.frame(meta_data_gps), aes(x = UMAP_1, y = UMAP_2, color = celltypes)
 ```{r}
 ConDecon_obj = RunConDecon(counts = counts_gps, latent = latent_gps,
 bulk = bulk_gps, variable.features = variable_genes_gps, max.iter = 50)
+```
+
+### Export Results
+
+```{r}
+cell_prob = ConDecon_obj[["Normalized_cell.prob"]]
+```
+
+## Plot ConDecon
+
+```{r}
+PlotConDecon(ConDecon_obj = ConDecon_obj,
+             umap = meta_data_gps[,c("UMAP_1", "UMAP_2")])
 ```
